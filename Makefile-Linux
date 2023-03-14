@@ -4,7 +4,7 @@ LD = $(CC)
 .SUFFIXES:
 .SUFFIXES: .o .c .h .cpp
 
-VER = 23_3_6
+VER = 23_3_13
 
 APP = PCWSieveCPU-linux64-$(VER)
 
@@ -15,10 +15,10 @@ LIBS = libprimesieve.a
 
 BOINC_DIR = /home/bryan/boinc
 BOINC_INC = -I$(BOINC_DIR)/lib -I$(BOINC_DIR)/api -I$(BOINC_DIR)
-BOINC_LIB = -L$(BOINC_DIR)/lib -L$(BOINC_DIR)/api -L$(BOINC_DIR) -lboinc_api -lboinc
+BOINC_LIB = -L$(BOINC_DIR)/lib -L$(BOINC_DIR)/api -L$(BOINC_DIR) -lboinc_api -lboinc -lpthread
 
 CFLAGS  = -I . -O3 -m64 -Wall -DVERS=\"$(VER)\"
-LDFLAGS = $(CFLAGS) -static -lstdc++ -lpthread
+LDFLAGS = $(CFLAGS) -static -lstdc++
 
 all : clean $(APP)
 

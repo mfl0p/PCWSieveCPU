@@ -38,11 +38,13 @@ pthread_mutex_t lock2;
 //-------------------------------
 
 
-FILE *my_fopen(const char * filename, const char * mode)
+// resolve is used for final factors.txt that is uploaded to BOINC server
+FILE *boinc_res_fopen(const char * filename, const char * mode)
 {
 	char resolved_name[512];
 
 	boinc_resolve_filename(filename,resolved_name,sizeof(resolved_name));
+
 	return boinc_fopen(resolved_name,mode);
 
 }
@@ -55,7 +57,7 @@ void gatherfactors( searchData & sd ){
 	int len = 256;
 	char input[len];
 
-	out = my_fopen("factors.txt","w");
+	out = boinc_res_fopen("factors.txt","w");
 
 	if( out == NULL ){
 		fprintf(stderr,"Cannot open factors.txt !!!\n");
@@ -68,7 +70,7 @@ void gatherfactors( searchData & sd ){
 			fprintf(stderr,"error in sprintf()\n");
 			exit(EXIT_FAILURE);
 		}
-		in = my_fopen(filename,"r");
+		in = boinc_fopen(filename,"r");
 
 		if( in == NULL ){
 			fprintf(stderr,"Cannot open %s !!!\n",filename);
@@ -132,10 +134,10 @@ int read_state_thread( searchData sd, uint64_t & current_p, int thread_id, bool 
 	}
 
         // Attempt to read state file A
-	if ((in = my_fopen(filenameA,"r")) == NULL){
+	if ((in = boinc_fopen(filenameA,"r")) == NULL){
 		good_state_a = false;
         }
-	else if (fscanf(in,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %d\n",&workunit_a,&current_a,&primecount_a,&checksum_a,&threads_a) != 5){
+	else if (fscanf(in,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",&workunit_a,&current_a,&primecount_a,&checksum_a,&threads_a) != 5){
 		fprintf(stderr,"Cannot parse %s !!!\n",filenameA);
 		good_state_a = false;
 	}
@@ -148,10 +150,10 @@ int read_state_thread( searchData sd, uint64_t & current_p, int thread_id, bool 
 	}
 
         // Attempt to read state file B
-        if ((in = my_fopen(filenameB,"r")) == NULL){
+        if ((in = boinc_fopen(filenameB,"r")) == NULL){
                 good_state_b = false;
         }
-	else if (fscanf(in,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %d\n",&workunit_b,&current_b,&primecount_b,&checksum_b,&threads_b) != 5){
+	else if (fscanf(in,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",&workunit_b,&current_b,&primecount_b,&checksum_b,&threads_b) != 5){
                 fprintf(stderr,"Cannot parse %s !!!\n",filenameB);
                 good_state_b = false;
         }
@@ -205,10 +207,10 @@ void checkpoint_thread( searchData sd, uint64_t my_P, int thread_id, bool & stat
 		exit(EXIT_FAILURE);
 	}	
 
-	if ((out = my_fopen(buffer,"w")) == NULL)
+	if ((out = boinc_fopen(buffer,"w")) == NULL)
 		fprintf(stderr,"Cannot open %s !!!\n",buffer);
 
-	if (fprintf(out,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %d\n",sd.workunit,my_P,primecount,checksum,sd.threads) < 0){
+	if (fprintf(out,"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",sd.workunit,my_P,primecount,checksum,sd.threads) < 0){
 		fprintf(stderr,"Cannot write to %s !!! Continuing...\n",buffer);
 		// Attempt to close, even though we failed to write
 		fclose(out);
@@ -223,7 +225,7 @@ void checkpoint_thread( searchData sd, uint64_t my_P, int thread_id, bool & stat
 }
 
 
-void clear_factors_file( int thread_id ){
+void clear_temp_factors_file( int thread_id ){
 
 	char buffer[20];	
 
@@ -233,7 +235,7 @@ void clear_factors_file( int thread_id ){
 	}
 
 	// clear result file
-	FILE * temp_file = my_fopen(buffer,"w");
+	FILE * temp_file = boinc_fopen(buffer,"w");
 	if (temp_file == NULL){
 		fprintf(stderr,"Cannot open %s !!!\n",buffer);
 		exit(EXIT_FAILURE);
@@ -252,7 +254,7 @@ void report_solution_temp( char * results, int thread_id ){
 		exit(EXIT_FAILURE);
 	}	
 
-	FILE * resfile = my_fopen(buffer,"a");
+	FILE * resfile = boinc_fopen(buffer,"a");
 
 	if( resfile == NULL ){
 		fprintf(stderr,"Cannot open %s !!!\n",buffer);
@@ -284,8 +286,6 @@ int lg2(uint64_t v) {
 
 
 void setupSearch(searchData & sd){
-
-	sd.p = sd.pmin;
 
 	if(sd.pmin == 0 || sd.pmax == 0){
 		printf("-p and -P arguments are required\n");
@@ -417,6 +417,10 @@ void setupSearch(searchData & sd){
 
 	// for BOINC fraction done
 	sd.wu_range = (double)(sd.pmax - sd.pmin);
+
+	// result buffer size per thread
+	sd.num_results = 1000000u / sd.threads;
+
 }
 
 
@@ -481,8 +485,8 @@ void cpu_sieve( searchData & sd ){
 		printf("Starting search at p: %" PRIu64 " n: %u k: %u\nStopping search at P: %" PRIu64 " N: %u K: %u\n", sd.pmin, sd.nmin+1, sd.kmin, sd.pmax, sd.nmax, sd.kmax);
 	}
 
-	// clear factor file
-	FILE * temp_file = my_fopen("factors.txt","w");
+	// clear final factor file
+	FILE * temp_file = boinc_res_fopen("factors.txt","w");
 	if (temp_file == NULL){
 		fprintf(stderr,"Cannot open %s !!!\n","factors.txt");
 		exit(EXIT_FAILURE);
@@ -493,10 +497,8 @@ void cpu_sieve( searchData & sd ){
 	fprintf(stderr,"Starting search...\n");
 	if(boinc_is_standalone()){
 		printf("Starting search...\n");
+		printf("nstep: %u\n",sd.nstep);
 	}
-
-
-	printf("nstep: %u\n",sd.nstep);
 
 
 	// initialize shared data
@@ -512,9 +514,9 @@ void cpu_sieve( searchData & sd ){
 	thread_data_t thr_data[sd.threads];
 
 	// create threads
-	uint64_t range = ((sd.pmax - sd.p) / sd.threads)+1;
+	uint64_t range = ((sd.pmax - sd.pmin) / sd.threads)+1;
 
-	uint64_t currp = sd.p;
+	uint64_t currp = sd.pmin;
 
 	for (uint32_t k = 0; k < sd.threads; ++k) {
 		thr_data[k].id = k;
@@ -550,18 +552,23 @@ void cpu_sieve( searchData & sd ){
 	}
 
 	boinc_fraction_done(1.0);
+
 	if(boinc_is_standalone()) printf("Tests done: 100.0%%\n");
+
+	boinc_begin_critical_section();
 
 	gatherfactors(sd);
 	sd.primecount = g_primecount;
 	sd.checksum = g_checksum;
 
-	fprintf(stderr,"Search complete.\nfactors %" PRIu64 ", prime count %" PRIu64 "\n", sd.factorcount, sd.primecount);
+	fprintf(stderr,"Search complete.\nfactors %u, prime count %" PRIu64 "\n", sd.factorcount, sd.primecount);
+
+	boinc_end_critical_section();
 
 	if(boinc_is_standalone()){
 		time(&totalf);
 		printf("Search finished in %d sec.\n", (int)totalf - (int)totals);
-		printf("factors %" PRIu64 ", prime count %" PRIu64 ", checksum %016" PRIX64 "\n", sd.factorcount, sd.primecount, sd.checksum);
+		printf("factors %u, prime count %" PRIu64 ", checksum %016" PRIX64 "\n", sd.factorcount, sd.primecount, sd.checksum);
 	}
 
 	ckerr(pthread_mutex_destroy(&lock1));

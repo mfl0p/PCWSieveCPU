@@ -153,14 +153,13 @@ void *thr_func_cw(void *arg) {
 	uint64_t current_p;
 	uint64_t last_P;
 	uint64_t complete;
-	const uint32_t thread_results 	= numresults/data->sd.threads;
 
 	// for fraction done
 	last_P = data->pmin;
 
 	if(data->sd.test){
 		current_p = data->pmin;
-		clear_factors_file(data->id);
+		clear_temp_factors_file(data->id);
 	}
 	else{
 		// Resume from checkpoint if there is one
@@ -170,7 +169,7 @@ void *thr_func_cw(void *arg) {
 		// starting from beginning
 		else{
 			current_p = data->pmin;
-			clear_factors_file(data->id);
+			clear_temp_factors_file(data->id);
 		}
 	}
 
@@ -179,12 +178,12 @@ void *thr_func_cw(void *arg) {
 	primesieve_jump_to(&it, current_p, data->pmax+1509);
 
 	// buffer factors between checkpoints
-	int64_t * factorP = (int64_t *)malloc( thread_results * sizeof(int64_t));
+	int64_t * factorP = (int64_t *)malloc( data->sd.num_results * sizeof(int64_t));
 	if( factorP == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorN = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorN = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorN == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
@@ -224,6 +223,8 @@ void *thr_func_cw(void *arg) {
 		if( ((int)ckpt_curr - (int)ckpt_last) > 60 ){
 			ckpt_last = ckpt_curr;
 
+			boinc_begin_critical_section();
+
 			if(factorcount > 0){
 				// print factors to temporary file and checkpoint
 				char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -247,6 +248,8 @@ void *thr_func_cw(void *arg) {
 			}
 
 			checkpoint_thread( data->sd, my_P, data->id, state_a, primecount, checksum );
+
+			boinc_end_critical_section();
 		}
 
 		// setup
@@ -262,9 +265,9 @@ void *thr_func_cw(void *arg) {
 			// Select the even one.
 			uint64_t kpos = (k0 & 1)?(my_P - k0):k0;
 
-			int i = __builtin_ctzll(kpos);
+			uint32_t i = __builtin_ctzll(kpos);
 
-			if(i <= (int)data->sd.nstep) {
+			if(i <= data->sd.nstep) {
 				uint64_t kll = kpos >> i;
 				uint32_t the_n = n + i;
 				if(kll <= (uint64_t)the_n){
@@ -286,7 +289,7 @@ void *thr_func_cw(void *arg) {
 									factorP[factorcount] = (s==1) ? (int64_t)my_P : -((int64_t)my_P);
 									factorN[factorcount] = the_n;
 									++factorcount;
-									if(factorcount > thread_results){
+									if(factorcount > data->sd.num_results){
 										printf("ERROR: result array overflow!\n");
 										fprintf(stderr,"ERROR: result array overflow!\n");
 										exit(EXIT_FAILURE);
@@ -326,6 +329,8 @@ void *thr_func_cw(void *arg) {
 	}
 
 	// final checkpoint
+	boinc_begin_critical_section();
+
 	if(factorcount > 0){
 		// print factors to temporary file and checkpoint
 		char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -349,6 +354,8 @@ void *thr_func_cw(void *arg) {
 	}
 
 	checkpoint_thread( data->sd, my_P, data->id, state_a, primecount, checksum );
+
+	boinc_end_critical_section();
 
 	// update global primecount and checksum
 	ckerr(pthread_mutex_lock(&lock1));
@@ -387,14 +394,13 @@ void *thr_func(void *arg) {
 	uint64_t current_p;
 	uint64_t last_P;
 	uint64_t complete;
-	const uint32_t thread_results 	= numresults/data->sd.threads;
 
 	// for fraction done
 	last_P = data->pmin;
 
 	if(data->sd.test){
 		current_p = data->pmin;
-		clear_factors_file(data->id);
+		clear_temp_factors_file(data->id);
 	}
 	else{
 		// Resume from checkpoint if there is one
@@ -404,7 +410,7 @@ void *thr_func(void *arg) {
 		// starting from beginning
 		else{
 			current_p = data->pmin;
-			clear_factors_file(data->id);
+			clear_temp_factors_file(data->id);
 		}
 	}
 
@@ -413,17 +419,17 @@ void *thr_func(void *arg) {
 	primesieve_jump_to(&it, current_p, data->pmax+1509);
 
 	// buffer factors between checkpoints
-	int64_t * factorP = (int64_t *)malloc( thread_results * sizeof(int64_t));
+	int64_t * factorP = (int64_t *)malloc( data->sd.num_results * sizeof(int64_t));
 	if( factorP == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorN = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorN = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorN == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorK = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorK = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorK == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
@@ -463,6 +469,8 @@ void *thr_func(void *arg) {
 		if( ((int)ckpt_curr - (int)ckpt_last) > 60 ){
 			ckpt_last = ckpt_curr;
 
+			boinc_begin_critical_section();
+
 			if(factorcount > 0){
 				// print factors to temporary file and checkpoint
 				char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -486,6 +494,8 @@ void *thr_func(void *arg) {
 			}
 
 			checkpoint_thread( data->sd, my_P, data->id, state_a, primecount, checksum );
+
+			boinc_end_critical_section();
 		}
 
 		// setup
@@ -501,9 +511,9 @@ void *thr_func(void *arg) {
 			// Select the even one.
 			uint64_t kpos = (k0 & 1)?(my_P - k0):k0;
 
-			int i = __builtin_ctzll(kpos);
+			uint32_t i = __builtin_ctzll(kpos);
 
-			if(i <= (int)data->sd.nstep) {
+			if(i <= data->sd.nstep) {
 				uint64_t kll = kpos >> i;
 				if(kll <= 0xffffffff){
 					uint32_t the_k = (uint32_t)kll;
@@ -519,7 +529,7 @@ void *thr_func(void *arg) {
 									factorN[factorcount] = the_n;
 									factorK[factorcount] = the_k;
 									++factorcount;
-									if(factorcount > thread_results){
+									if(factorcount > data->sd.num_results){
 										printf("ERROR: result array overflow!\n");
 										fprintf(stderr,"ERROR: result array overflow!\n");
 										exit(EXIT_FAILURE);
@@ -560,6 +570,8 @@ void *thr_func(void *arg) {
 	}
 
 	// final checkpoint
+	boinc_begin_critical_section();
+
 	if(factorcount > 0){
 		// print factors to temporary file and checkpoint
 		char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -583,6 +595,8 @@ void *thr_func(void *arg) {
 	}
 
 	checkpoint_thread( data->sd, my_P, data->id, state_a, primecount, checksum );
+
+	boinc_end_critical_section();
 
 	// update global primecount and checksum
 	ckerr(pthread_mutex_lock(&lock1));

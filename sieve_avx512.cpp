@@ -351,14 +351,13 @@ void *thr_func_cw_avx512(void *arg) {
 	const __m512i Vr0		= _mm512_set1_epi64(data->sd.r0);
 	const __m512i Vr1		= _mm512_set1_epi64(data->sd.r1);
 	const uint32_t sm_mont_nstep	= data->sd.mont_nstep - 32;
-	const uint32_t thread_results 	= numresults/data->sd.threads;
 
 	// for fraction done
 	last_P = data->pmin;
 
 	if(data->sd.test){
 		current_p = data->pmin;
-		clear_factors_file(data->id);
+		clear_temp_factors_file(data->id);
 	}
 	else{
 		// Resume from checkpoint if there is one
@@ -368,7 +367,7 @@ void *thr_func_cw_avx512(void *arg) {
 		// starting from beginning
 		else{
 			current_p = data->pmin;
-			clear_factors_file(data->id);
+			clear_temp_factors_file(data->id);
 		}
 	}
 
@@ -377,12 +376,12 @@ void *thr_func_cw_avx512(void *arg) {
 	primesieve_jump_to(&it, current_p, data->pmax+12072);
 
 	// buffer factors between checkpoints
-	int64_t * factorP = (int64_t *)malloc( thread_results * sizeof(int64_t));
+	int64_t * factorP = (int64_t *)malloc( data->sd.num_results * sizeof(int64_t));
 	if( factorP == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorN = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorN = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorN == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
@@ -427,6 +426,8 @@ void *thr_func_cw_avx512(void *arg) {
 		if( ((int)ckpt_curr - (int)ckpt_last) > 60 ){
 			ckpt_last = ckpt_curr;
 
+			boinc_begin_critical_section();
+
 			if(factorcount > 0){
 				// print factors to temporary file and checkpoint
 				char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -453,6 +454,8 @@ void *thr_func_cw_avx512(void *arg) {
 			v_checksum = _mm512_setzero_si512();
 
 			checkpoint_thread( data->sd, my_P[0], data->id, state_a, primecount, checksum );
+
+			boinc_end_critical_section();
 		}
 
 		vPs = neg_invmod2pow_ul_avx512(vP);
@@ -522,7 +525,7 @@ void *thr_func_cw_avx512(void *arg) {
 										factorP[factorcount] = (s==1) ? (int64_t)P : -((int64_t)P);
 										factorN[factorcount] = the_n;
 										++factorcount;
-										if(factorcount > thread_results){
+										if(factorcount > data->sd.num_results){
 											printf("ERROR: result array overflow!\n");
 											fprintf(stderr,"ERROR: result array overflow!\n");
 											exit(EXIT_FAILURE);
@@ -594,6 +597,8 @@ void *thr_func_cw_avx512(void *arg) {
 	checksum += _mm512_reduce_add_epi64(v_checksum);
 
 	// final checkpoint
+	boinc_begin_critical_section();
+
 	if(factorcount > 0){
 		// print factors to temporary file and checkpoint
 		char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -617,6 +622,8 @@ void *thr_func_cw_avx512(void *arg) {
 	}
 
 	checkpoint_thread( data->sd, data->pmax, data->id, state_a, primecount, checksum );
+
+	boinc_end_critical_section();
 
 	// update global primecount and checksum
 	ckerr(pthread_mutex_lock(&lock1));
@@ -672,14 +679,13 @@ void *thr_func_avx512(void *arg) {
 	const __m512i KMAX		= _mm512_set1_epi64(data->sd.kmax+1);
 	const __m512i KMIN		= _mm512_set1_epi64(data->sd.kmin-1);
 	const uint32_t sm_mont_nstep	= data->sd.mont_nstep - 32;
-	const uint32_t thread_results 	= numresults/data->sd.threads;
 
 	// for fraction done
 	last_P = data->pmin;
 
 	if(data->sd.test){
 		current_p = data->pmin;
-		clear_factors_file(data->id);
+		clear_temp_factors_file(data->id);
 	}
 	else{
 		// Resume from checkpoint if there is one
@@ -689,7 +695,7 @@ void *thr_func_avx512(void *arg) {
 		// starting from beginning
 		else{
 			current_p = data->pmin;
-			clear_factors_file(data->id);
+			clear_temp_factors_file(data->id);
 		}
 	}
 
@@ -698,17 +704,17 @@ void *thr_func_avx512(void *arg) {
 	primesieve_jump_to(&it, current_p, data->pmax+12072);
 
 	// buffer factors between checkpoints
-	int64_t * factorP = (int64_t *)malloc( thread_results * sizeof(int64_t));
+	int64_t * factorP = (int64_t *)malloc( data->sd.num_results * sizeof(int64_t));
 	if( factorP == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorN = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorN = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorN == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
 	}
-	uint32_t * factorK = (uint32_t *)malloc( thread_results * sizeof(uint32_t));
+	uint32_t * factorK = (uint32_t *)malloc( data->sd.num_results * sizeof(uint32_t));
 	if( factorK == NULL ){
 		fprintf(stderr,"malloc error\n");
 		exit(EXIT_FAILURE);
@@ -753,6 +759,8 @@ void *thr_func_avx512(void *arg) {
 		if( ((int)ckpt_curr - (int)ckpt_last) > 60 ){
 			ckpt_last = ckpt_curr;
 
+			boinc_begin_critical_section();
+
 			if(factorcount > 0){
 				// print factors to temporary file and checkpoint
 				char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -779,6 +787,8 @@ void *thr_func_avx512(void *arg) {
 			v_checksum = _mm512_setzero_si512();
 
 			checkpoint_thread( data->sd, my_P[0], data->id, state_a, primecount, checksum );
+
+			boinc_end_critical_section();
 		}
 
 		vPs = neg_invmod2pow_ul_avx512(vP);
@@ -840,7 +850,7 @@ void *thr_func_avx512(void *arg) {
 										factorN[factorcount] = the_n;
 										factorK[factorcount] = the_k;
 										++factorcount;
-										if(factorcount > thread_results){
+										if(factorcount > data->sd.num_results){
 											printf("ERROR: result array overflow!\n");
 											fprintf(stderr,"ERROR: result array overflow!\n");
 											exit(EXIT_FAILURE);
@@ -913,6 +923,8 @@ void *thr_func_avx512(void *arg) {
 	checksum += _mm512_reduce_add_epi64(v_checksum);
 
 	// final checkpoint
+	boinc_begin_critical_section();
+
 	if(factorcount > 0){
 		// print factors to temporary file and checkpoint
 		char * resbuff = (char *)malloc( factorcount * sizeof(char) * 256 );
@@ -936,6 +948,8 @@ void *thr_func_avx512(void *arg) {
 	}
 
 	checkpoint_thread( data->sd, data->pmax, data->id, state_a, primecount, checksum );
+
+	boinc_end_critical_section();
 
 	// update global primecount and checksum
 	ckerr(pthread_mutex_lock(&lock1));

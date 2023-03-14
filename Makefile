@@ -4,7 +4,7 @@ LD = $(CC)
 .SUFFIXES:
 .SUFFIXES: .o .c .h .cpp
 
-VER = 23_3_6
+VER = 23_3_13
 
 APP = PCWSieveCPU-win64-$(VER)
 
